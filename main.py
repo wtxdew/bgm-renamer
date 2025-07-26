@@ -9,16 +9,17 @@ import colorlog
 from pathlib import Path  # make sure this is imported
 from typing import Dict, Optional
 
+
 class DryRunFilter(logging.Filter):
-    def __init__(self, name='', is_dry_run=False):
+    def __init__(self, name="", is_dry_run=False):
         super().__init__(name)
         self.is_dry_run = is_dry_run
 
     def filter(self, record):
-        if self.is_dry_run and record.levelname == 'INFO':
-            record.levelname = 'DRYRUN' 
-            record.levelno = logging.INFO 
-        return True 
+        if self.is_dry_run and record.levelname == "INFO":
+            record.levelname = "DRYRUN"
+            record.levelno = logging.INFO
+        return True
 
 
 handler = colorlog.StreamHandler()
@@ -28,7 +29,7 @@ handler.setFormatter(
         log_colors={
             "DEBUG": "cyan",
             "INFO": "green",
-            'DRYRUN': 'green',
+            "DRYRUN": "green",
             "WARNING": "yellow",
             "ERROR": "red",
             "CRITICAL": "bold_red",
@@ -232,7 +233,11 @@ def extract_language_code(filename: str) -> Optional[str]:
 
 
 def link_file_loop(
-    src_dir: Path, dst_dir: Path, series_name: str = "", season_num: int = 1, dry_run: bool = False
+    src_dir: Path,
+    dst_dir: Path,
+    series_name: str = "",
+    season_num: int = 1,
+    dry_run: bool = False,
 ) -> None:
     file_path_list = []
     ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png", ".txt"]
@@ -245,21 +250,25 @@ def link_file_loop(
             if file.name in ignore_file:
                 logger.debug(f"SKIP file: {file.name}")
                 continue
-            ep_num = parse_episode_number(file.name)
-            logger.debug(f"ep_num: {ep_num}")
-
             # Extract language code for subtitle files
             language_code = extract_language_code(file.name)
             logger.debug(f"language_code: {language_code}")
 
-            if ep_num is not None:
+            ep_num = parse_episode_number(file.name)
+            logger.debug(f"ep_num: {ep_num}")
+            if src_dir.name == series_name:
+                is_episode = True
+            else:
+                is_episode = False
+
+            if ep_num is not None and is_episode:
                 # Regular episode file
                 if language_code:
-                    new_filename = (
-                        f"{series_name} S{season_num:02d}E{ep_num:02d}.{language_code}{file.suffix}"
-                    )
+                    new_filename = f"{series_name} S{season_num:02d}E{ep_num:02d}.{language_code}{file.suffix}"
                 else:
-                    new_filename = f"{series_name} S{season_num:02d}E{ep_num:02d}{file.suffix}"
+                    new_filename = (
+                        f"{series_name} S{season_num:02d}E{ep_num:02d}{file.suffix}"
+                    )
             else:
                 # Special file
                 video_formats = parse_file_name(file)["video_format"]
@@ -377,7 +386,6 @@ def main():
 
     dry_run = args.dry_run
     dry_run_filter.is_dry_run = dry_run
-
 
     for path_str in args.names:
         path = Path(path_str)
