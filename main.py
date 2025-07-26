@@ -98,11 +98,32 @@ def parse_file_name(path: Path) -> Dict:
 EPISODE_PATTERN = r"[\s\-\[](\d{2,3})(?=[\]\s\.])"
 # Episode range pattern: like "01-12"
 EPISODE_RANGE_PATTERN = r"\d{1,2}\s*-\s*\d{1,3}"
+# Language code pattern: matches language codes before subtitle file extensions
+LANGUAGE_CODE_PATTERN = r"\.([A-Za-z]{2,4}(?:-[A-Za-z]{2,4})?(?:-[A-Za-z]{4})?)(?=\.(ass|srt|vtt|sub|ssa)$)"
 
 
 def parse_episode_number(filename: str) -> Optional[int]:
     match = re.search(EPISODE_PATTERN, filename)
     return int(match.group(1)) if match else None
+
+
+def extract_language_code(filename: str) -> Optional[str]:
+    """Extract language code from subtitle files.
+
+    Args:
+        filename: The filename to parse
+
+    Returns:
+        The language code if found, None otherwise
+
+    Examples:
+        'file.JPTC.ass' -> 'JPTC'
+        'file.zh-TW.srt' -> 'zh-TW'
+        'file.zh-Hans.vtt' -> 'zh-Hans'
+        'file.mp4' -> None
+    """
+    match = re.search(LANGUAGE_CODE_PATTERN, filename)
+    return match.group(1) if match else None
 
 
 def link_file_loop(
@@ -118,12 +139,27 @@ def link_file_loop(
                 logger.debug(f"SKIP file: {file.name}")
                 continue
             ep_num = parse_episode_number(file.name)
+            logger.debug(f"ep_num: {ep_num}")
+
+            # Extract language code for subtitle files
+            language_code = extract_language_code(file.name)
+            logger.debug(f"language_code: {language_code}")
+
             if ep_num is not None:
-                new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
+                # Regular episode file
+                if language_code:
+                    new_filename = f"{series_name} S01E{ep_num:02d}.{language_code}{file.suffix}"
+                else:
+                    new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
             else:
+                # Special file
                 video_formats = parse_file_name(file)["video_format"]
                 sp_name = video_formats[0] if video_formats else "Special"
-                new_filename = f"{sp_name}{file.suffix}"
+                if language_code:
+                    new_filename = f"{sp_name}.{language_code}{file.suffix}"
+                else:
+                    new_filename = f"{sp_name}{file.suffix}"
+
             dst_file = dst_dir / new_filename
             logger.info(f"{new_filename} <- {file.name}")
             logger.debug(f"<< SRC File: {file}")
