@@ -9,6 +9,18 @@ import colorlog
 from pathlib import Path  # make sure this is imported
 from typing import Dict, Optional
 
+class DryRunFilter(logging.Filter):
+    def __init__(self, name='', is_dry_run=False):
+        super().__init__(name)
+        self.is_dry_run = is_dry_run
+
+    def filter(self, record):
+        if self.is_dry_run and record.levelname == 'INFO':
+            record.levelname = 'DRYRUN' 
+            record.levelno = logging.INFO 
+        return True 
+
+
 handler = colorlog.StreamHandler()
 handler.setFormatter(
     colorlog.ColoredFormatter(
@@ -16,6 +28,7 @@ handler.setFormatter(
         log_colors={
             "DEBUG": "cyan",
             "INFO": "green",
+            'DRYRUN': 'green',
             "WARNING": "yellow",
             "ERROR": "red",
             "CRITICAL": "bold_red",
@@ -24,6 +37,8 @@ handler.setFormatter(
 )
 
 logger = colorlog.getLogger("myapp")
+dry_run_filter = DryRunFilter(is_dry_run=False)
+logger.addFilter(dry_run_filter)
 logger.addHandler(handler)
 # Default level will be set by configure_logging function
 
@@ -220,10 +235,11 @@ def link_file_loop(
     src_dir: Path, dst_dir: Path, series_name: str = "", season_num: int = 1, dry_run: bool = False
 ) -> None:
     file_path_list = []
-    ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png"]
+    ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png", ".txt"]
     ignore_file = [".DS_Store"]
     logger.info(f"Source directory: {src_dir}")
     logger.info(f"Target directory: {dst_dir}")
+    logger.info("Would link: Source -> Target")
     for file in src_dir.iterdir():
         if file.is_file() and file.suffix not in ignore_exts:
             if file.name in ignore_file:
@@ -247,7 +263,7 @@ def link_file_loop(
             else:
                 # Special file
                 video_formats = parse_file_name(file)["video_format"]
-                sp_name = video_formats[0] if video_formats else "Special"
+                sp_name = video_formats[0] if video_formats else "NO_NAME"
                 if language_code:
                     new_filename = f"{sp_name}.{language_code}{file.suffix}"
                 else:
@@ -265,9 +281,7 @@ def link_file_loop(
             file_path_list.append(dst_file)
             logger.debug(f"<< SRC File: {file}")
             logger.debug(f">> DST File: {dst_file}")
-            if dry_run:
-                logger.info("[DRY RUN] Would link: SRC -> DST")
-            else:
+            if not dry_run:
                 try:
                     os.link(file, dst_file)
                 except OSError as e:
@@ -362,6 +376,8 @@ def main():
         exit(1)
 
     dry_run = args.dry_run
+    dry_run_filter.is_dry_run = dry_run
+
 
     for path_str in args.names:
         path = Path(path_str)
