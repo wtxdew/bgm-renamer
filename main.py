@@ -96,19 +96,105 @@ def parse_file_name(path: Path) -> Dict:
     }
 
 
-# Episode number pattern: 2-3 digits preceded by space, dash, or bracket
-EPISODE_PATTERN = r"[\s\-\[](\d{2,3})(?=[\]\s\.])"
+# Episode number patterns: support multiple formats
+EPISODE_PATTERN_BRACKET = r"[\s\-\[](\d{2,3})(?=[\]\s\.])"  # Original [01] format
+EPISODE_PATTERN_SXX_EXX = r"S\d{1,2}E(\d{1,3})"  # S01E01, S1E1 format
+EPISODE_PATTERN_JAPANESE = r"第(\d{1,3})話"  # Japanese 第08話 format
 # Episode range pattern: like "01-12"
 EPISODE_RANGE_PATTERN = r"\d{1,2}\s*-\s*\d{1,3}"
+# Season number patterns: support multiple formats
+SEASON_PATTERN_SEASON = r"Season\s+(\d{1,2})"  # "Season 2"
+SEASON_PATTERN_SXX = r"S(\d{1,2})(?:E\d+)?"  # "S02" or "S02E01"
+SEASON_PATTERN_JAPANESE = r"第(\d{1,2})期"  # Japanese "第2期"
 # Language code pattern: matches language codes before subtitle file extensions
 LANGUAGE_CODE_PATTERN = (
     r"\.([A-Za-z]{2,4}(?:-[A-Za-z]{2,4})?(?:-[A-Za-z]{4})?)(?=\.(ass|srt|vtt|sub|ssa)$)"
 )
+# Special content patterns: recognize various special content indicators
+SPECIAL_CONTENT_PATTERN = r"(SPs?|OVA|OAD|映像特典|特典|Specials?|Extras?|Bonus)"
 
 
 def parse_episode_number(filename: str) -> Optional[int]:
-    match = re.search(EPISODE_PATTERN, filename)
-    return int(match.group(1)) if match else None
+    """Parse episode number from filename using multiple patterns.
+
+    Args:
+        filename: The filename to parse
+
+    Returns:
+        The episode number if found, None otherwise
+
+    Examples:
+        '[Group] Series [01].mkv' -> 1
+        'Tower.of.God.S02E23.mkv' -> 23
+        '[Snow-Raws] ばらかもん 第08話.mkv' -> 8
+    """
+    # Try bracket format first (original pattern)
+    match = re.search(EPISODE_PATTERN_BRACKET, filename)
+    if match:
+        return int(match.group(1))
+
+    # Try SxxExx format
+    match = re.search(EPISODE_PATTERN_SXX_EXX, filename)
+    if match:
+        return int(match.group(1))
+
+    # Try Japanese format
+    match = re.search(EPISODE_PATTERN_JAPANESE, filename)
+    if match:
+        return int(match.group(1))
+
+    return None
+
+
+def parse_season_number(path_or_filename: str) -> int:
+    """Parse season number from folder name or filename.
+
+    Args:
+        path_or_filename: The path or filename to parse
+
+    Returns:
+        The season number if found, defaults to 1
+
+    Examples:
+        'Series Name Season 2' -> 2
+        'Tower.of.God.S02E23.mkv' -> 2
+        'Series 第2期' -> 2
+        'Regular Series' -> 1 (default)
+    """
+    # Try "Season X" format
+    match = re.search(SEASON_PATTERN_SEASON, path_or_filename, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    # Try "SXX" format
+    match = re.search(SEASON_PATTERN_SXX, path_or_filename)
+    if match:
+        return int(match.group(1))
+
+    # Try Japanese format
+    match = re.search(SEASON_PATTERN_JAPANESE, path_or_filename)
+    if match:
+        return int(match.group(1))
+
+    return 1  # Default to season 1
+
+
+def is_special_content(path_or_filename: str) -> bool:
+    """Check if the path or filename indicates special content.
+
+    Args:
+        path_or_filename: The path or filename to check
+
+    Returns:
+        True if it's special content, False otherwise
+
+    Examples:
+        'SPs' -> True
+        '映像特典' -> True
+        'OVA' -> True
+        'regular_episode.mkv' -> False
+    """
+    return bool(re.search(SPECIAL_CONTENT_PATTERN, path_or_filename, re.IGNORECASE))
 
 
 def extract_language_code(filename: str) -> Optional[str]:
@@ -131,7 +217,7 @@ def extract_language_code(filename: str) -> Optional[str]:
 
 
 def link_file_loop(
-    src_dir: Path, dst_dir: Path, series_name: str = "", dry_run: bool = False
+    src_dir: Path, dst_dir: Path, series_name: str = "", season_num: int = 1, dry_run: bool = False
 ) -> None:
     file_path_list = []
     ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png"]
@@ -154,10 +240,10 @@ def link_file_loop(
                 # Regular episode file
                 if language_code:
                     new_filename = (
-                        f"{series_name} S01E{ep_num:02d}.{language_code}{file.suffix}"
+                        f"{series_name} S{season_num:02d}E{ep_num:02d}.{language_code}{file.suffix}"
                     )
                 else:
-                    new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
+                    new_filename = f"{series_name} S{season_num:02d}E{ep_num:02d}{file.suffix}"
             else:
                 # Special file
                 video_formats = parse_file_name(file)["video_format"]
@@ -199,6 +285,11 @@ def rearrange_directory(
     src_root = Path(meta["root"])
     src_dir = Path(meta["raw"])
     dst_dir = dst_root / series_name
+
+    # Detect season number from folder name or directory structure
+    season_num = parse_season_number(str(src_dir))
+    logger.debug(f"detected season: {season_num}")
+
     if dry_run:
         logger.info(f"[DRY RUN] Would create DST directory: {dst_dir}")
     else:
@@ -208,7 +299,7 @@ def rearrange_directory(
     logger.debug(f"src dir: {src_dir}")
     logger.debug(f"dst dir: {dst_dir}")
 
-    dst_season = dst_dir / "Season 01"
+    dst_season = dst_dir / f"Season {season_num:02d}"
     dst_extras = dst_dir / "extras"
     if dry_run:
         logger.info(f"[DRY RUN] Would create directory: {dst_season}")
@@ -219,13 +310,23 @@ def rearrange_directory(
 
     # Season Episode
     logger.info("Start Season Episode")
-    link_file_loop(src_dir, dst_season, series_name, dry_run)
+    link_file_loop(src_dir, dst_season, series_name, season_num, dry_run)
 
-    # SPs Video
-    logger.info("## START SPs VIDEO")
+    # Enhanced Special Content Detection
+    logger.info("## START SPECIAL CONTENT")
+
+    # Check for traditional "SPs" folder
     special_dir = src_dir / "SPs"
     if special_dir.exists() and special_dir.is_dir():
-        link_file_loop(special_dir, dst_extras, series_name, dry_run)
+        link_file_loop(special_dir, dst_extras, series_name, season_num, dry_run)
+
+    # Check for other special content folders
+    special_folders = ["映像特典", "特典", "OVA", "OAD", "Specials", "Extras", "Bonus"]
+    for folder_name in special_folders:
+        special_path = src_dir / folder_name
+        if special_path.exists() and special_path.is_dir():
+            logger.info(f"Found special content folder: {folder_name}")
+            link_file_loop(special_path, dst_extras, series_name, season_num, dry_run)
 
     orig_dir = orig_root / meta["dir"]
 
