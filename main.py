@@ -129,7 +129,7 @@ def link_file_loop(
             logger.debug(f"<< SRC File: {file}")
             logger.debug(f">> DST File: {dst_file}")
             if dry_run:
-                logger.debug("[DRY RUN] Would link: SRC -> DST")
+                logger.info("[DRY RUN] Would link: SRC -> DST")
             else:
                 try:
                     os.link(file, dst_file)
@@ -145,7 +145,7 @@ def rearrange_directory( meta: Dict[str, str], dry_run: bool = False,) -> None:
     src_dir = Path(meta["raw"])
     dst_dir = dst_root / series_name
     if dry_run:
-        logger.debug(f"[DRY RUN] Would create DST directory: {dst_dir}")
+        logger.info(f"[DRY RUN] Would create DST directory: {dst_dir}")
     else:
         dst_dir.mkdir(parents=True, exist_ok=True)
     logger.debug(f"name: {series_name}")
@@ -156,8 +156,8 @@ def rearrange_directory( meta: Dict[str, str], dry_run: bool = False,) -> None:
     dst_season = dst_dir / "Season 01"
     dst_extras = dst_dir / "extras"
     if dry_run:
-        logger.debug(f"[DRY RUN] Would create directory: {dst_season}")
-        logger.debug(f"[DRY RUN] Would create directory: {dst_extras}")
+        logger.info(f"[DRY RUN] Would create directory: {dst_season}")
+        logger.info(f"[DRY RUN] Would create directory: {dst_extras}")
     else:
         dst_season.mkdir(parents=True, exist_ok=True)
         dst_extras.mkdir(parents=True, exist_ok=True)
@@ -176,7 +176,7 @@ def rearrange_directory( meta: Dict[str, str], dry_run: bool = False,) -> None:
 
     logger.info(f"Moving SRC to : {orig_dir}")
     if dry_run:
-        logger.debug(f"[DRY RUN] SRC Would Move: {orig_dir}")
+        logger.info(f"[DRY RUN] SRC Would Move: {orig_dir}")
     elif not orig_dir.exists():
         shutil.move(src_dir, orig_dir)
     else:
