@@ -114,16 +114,9 @@ def link_file_loop(
                     logger.error(f"Failed to link {file} -> {dst_file}: {e}")
 
 
-def rearrange_directory(
-    meta: Dict[str, str],
-    dst_root: Path = None,
-    orig_root: Path = None,
-    dry_run: bool = False,
-) -> None:
-    if dst_root is None:
-        dst_root = Path(os.getenv("ANIME_DST_ROOT", "/Volumes/NAS_SSD/Media/Anime"))
-    if orig_root is None:
-        orig_root = Path(os.getenv("ANIME_ORIG_ROOT", "/Volumes/NAS_SSD/Media/orig"))
+def rearrange_directory( meta: Dict[str, str], dry_run: bool = False,) -> None:
+    dst_root = Path("/Volumes/NAS_SSD/Media/Anime")
+    orig_root = Path("/Volumes/NAS_SSD/Media/orig")
     series_name = meta["series_name"]
     src_root = Path(meta["root"])
     src_dir = Path(meta["raw"])
