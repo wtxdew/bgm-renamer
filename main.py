@@ -168,14 +168,15 @@ def link_file_loop(
                     new_filename = f"{sp_name}{file.suffix}"
 
             dst_file = dst_dir / new_filename
-            file_path_list.append(dst_file)
+            num_this = len(file_path_list) + 1
             if dst_file in file_path_list:
                 number = file_path_list.index(dst_file) + 1
                 logger.warning(
-                    f"{len(file_path_list):02d}. duplicate with {number:02d}. :{new_filename} <- {file.name}"
+                    f"{num_this:02d}. duplicate with {number:02d}. :{new_filename} <- {file.name}"
                 )
             else:
-                logger.info(f"{len(file_path_list):02d}. {new_filename} <- {file.name}")
+                logger.info(f"{num_this:02d}. {new_filename} <- {file.name}")
+            file_path_list.append(dst_file)
             logger.debug(f"<< SRC File: {file}")
             logger.debug(f">> DST File: {dst_file}")
             if dry_run:
