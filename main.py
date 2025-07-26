@@ -171,6 +171,7 @@ def link_file_loop(
                     os.link(file, dst_file)
                 except OSError as e:
                     logger.error(f"Failed to link {file} -> {dst_file}: {e}")
+                    exit(255)
 
 
 def rearrange_directory( meta: Dict[str, str], dry_run: bool = False,) -> None:
@@ -239,6 +240,7 @@ def main():
         configure_logging(args.log_level)
     except ValueError as e:
         parser.error(str(e))
+        exit(1)
 
     dry_run = args.dry_run
 
