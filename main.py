@@ -99,7 +99,8 @@ def parse_file_name(path: Path) -> Dict:
 
     # Step 4: Clean leading dash / extra characters
     name = re.sub(r"^[-\s]+", "", name)
-    series_name = name.strip()
+    # Step 5: Clean series name from season indicators
+    series_name = clean_series_name(name.strip())
 
     return {
         "series_name": series_name,
@@ -127,7 +128,7 @@ LANGUAGE_CODE_PATTERN = (
     r"\.([A-Za-z]{2,4}(?:-[A-Za-z]{2,4})?(?:-[A-Za-z]{4})?)(?=\.(ass|srt|vtt|sub|ssa)$)"
 )
 # Special content patterns: recognize various special content indicators
-SPECIAL_CONTENT_PATTERN = r"(SPs?|OVA|OAD|映像特典|特典|Specials?|Extras?|Bonus)"
+SPECIAL_CONTENT_PATTERN = r"(SPs?|OVA|OAD|映像特典|特典|Specials?|Extras?|Bonus|NCED\d*|NCOP\d*|OP\d*|ED\d*|MENU\d*|PV\d*|CM\d*|第[\d一二三四五六七八九十百]+[话話]?(?:ED|OP))"
 
 
 def parse_episode_number(filename: str) -> Optional[int]:
@@ -213,6 +214,102 @@ def is_special_content(path_or_filename: str) -> bool:
     return bool(re.search(SPECIAL_CONTENT_PATTERN, path_or_filename, re.IGNORECASE))
 
 
+def extract_special_content_name(filename: str) -> Optional[str]:
+    """Extract meaningful name from special content files, including compound names.
+
+    Args:
+        filename: The filename to parse
+
+    Returns:
+        The special content name if found, None otherwise
+
+    Examples:
+        '[SFEO-Raws] Handa-kun - NCED3 (BD 1080P x264 ALAC).mkv' -> 'NCED3'
+        '[Snow-Raws] 世界征服 ~謀略のズヴィズダー~ OP(BD 1920x1080 HEVC-YUV420P10 FLAC).mkv' -> 'OP'
+        '[Snow-Raws] ばらかもん MENU4(BD 1920x1080 HEVC-YUV420P10 FLAC).mkv' -> 'MENU4'
+        '[Snow-Raws] 世界征服 ~謀略のズヴィズダー~ 第十三话ED(BD 1920x1080 HEVC-YUV420P10 FLAC).mkv' -> '第十三话ED'
+        '[Snow-Raws] ばらかもん PV&CM4(BD 1920x1080 HEVC-YUV420P10 FLAC).mkv' -> 'PV&CM4'
+    """
+    # First try to match compound special content patterns (multiple indicators with separators)
+    # Look for patterns like "PV&CM4", "NCOP1&2", "OP&ED", etc.
+    compound_pattern = r"((?:NCED|NCOP|MENU|PV|CM|OVA|OAD|SP|OP|ED)\d*(?:[&+](?:NCED|NCOP|MENU|PV|CM|OVA|OAD|SP|OP|ED)?\d*)*)"
+    match = re.search(compound_pattern, filename, re.IGNORECASE)
+    if match:
+        compound_name = match.group(1)
+        # Check if it's actually a compound name (contains & or +) or a valid single name
+        if '&' in compound_name or '+' in compound_name:
+            return compound_name
+        # If it's a single name but matches our pattern, continue to other checks for better matching
+
+    # Then try to match Chinese/Japanese episode-specific patterns
+    chinese_pattern = r"(第[\d一二三四五六七八九十百]+[话話]?(?:ED|OP))"
+    match = re.search(chinese_pattern, filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Try other special content patterns (single indicators)
+    other_pattern = r"(NCED\d*|NCOP\d*|MENU\d*|PV\d*|CM\d*|OVA\d*|OAD\d*|SP\d*)"
+    match = re.search(other_pattern, filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Finally try simple OP/ED patterns (as fallback)
+    simple_pattern = r"\b(OP\d*|ED\d*)\b"
+    match = re.search(simple_pattern, filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def clean_series_name(series_name: str) -> str:
+    """Clean series name by removing season indicators and redundant information.
+
+    Args:
+        series_name: The raw series name to clean
+
+    Returns:
+        Cleaned series name without season indicators
+
+    Examples:
+        'Tower of God Season 01' -> 'Tower of God'
+        'Tower of God Season 02' -> 'Tower of God'
+        'Goblin Slayer II' -> 'Goblin Slayer II' (keep special season indicators like II)
+        'Series S2' -> 'Series'
+    """
+    # Remove common season patterns but preserve special ones like "II", "III"
+    # Remove "Season X" patterns
+    cleaned = re.sub(r'\s+Season\s+\d+', '', series_name, flags=re.IGNORECASE)
+    # Remove "S\d+" patterns at the end
+    cleaned = re.sub(r'\s+S\d+$', '', cleaned)
+    # Remove standalone season numbers at the end
+    cleaned = re.sub(r'\s+\d+$', '', cleaned)
+
+    return cleaned.strip()
+
+
+def get_season_from_filename(filename: str) -> Optional[int]:
+    """Extract season number specifically from filename (prioritized over folder).
+
+    Args:
+        filename: The filename to parse
+
+    Returns:
+        Season number if found in filename, None otherwise
+    """
+    # Try SxxExx format first (most reliable)
+    match = re.search(r'S(\d{1,2})E\d+', filename)
+    if match:
+        return int(match.group(1))
+
+    # Try standalone Sxx format
+    match = re.search(r'\bS(\d{1,2})\b', filename)
+    if match:
+        return int(match.group(1))
+
+    return None
+
+
 def extract_language_code(filename: str) -> Optional[str]:
     """Extract language code from subtitle files.
 
@@ -267,9 +364,20 @@ def link_file_loop(
                         f"{series_name} S{season_num:02d}E{ep_num:02d}{file.suffix}"
                     )
             else:
-                # Special file
-                video_formats = parse_file_name(file)["video_format"]
-                sp_name = video_formats[0] if video_formats else "NO_NAME"
+                # Special file - try to extract meaningful name
+                special_name = extract_special_content_name(file.name)
+                logger.debug(f"special_name: {special_name}")
+
+                if special_name:
+                    # Use extracted special content name
+                    sp_name = special_name
+                else:
+                    # Fallback to video format or file stem
+                    video_formats = parse_file_name(file)["video_format"]
+                    sp_name = video_formats[0] if video_formats else file.stem
+
+                logger.debug(f"final sp_name: {sp_name}")
+
                 if language_code:
                     new_filename = f"{sp_name}.{language_code}{file.suffix}"
                 else:
@@ -306,9 +414,24 @@ def rearrange_directory(
     src_dir = Path(meta["raw"])
     dst_dir = dst_root / series_name
 
-    # Detect season number from folder name or directory structure
-    season_num = parse_season_number(str(src_dir))
-    logger.debug(f"detected season: {season_num}")
+    # Detect season number - prioritize filename over folder
+    # First, try to detect season from any file in the directory
+    season_from_files = None
+    for file in src_dir.iterdir():
+        if file.is_file():
+            file_season = get_season_from_filename(file.name)
+            if file_season:
+                season_from_files = file_season
+                logger.debug(f"detected season from file '{file.name}': {file_season}")
+                break
+
+    # Use file-based season if found, otherwise fall back to folder-based
+    if season_from_files:
+        season_num = season_from_files
+        logger.debug(f"using season from filename: {season_num}")
+    else:
+        season_num = parse_season_number(str(src_dir))
+        logger.debug(f"using season from folder: {season_num}")
 
     if dry_run:
         logger.info(f"[DRY RUN] Would create DST directory: {dst_dir}")
