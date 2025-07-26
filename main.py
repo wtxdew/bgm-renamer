@@ -238,6 +238,7 @@ def link_file_loop(
     series_name: str = "",
     season_num: int = 1,
     dry_run: bool = False,
+    is_episode=False,
 ) -> None:
     file_path_list = []
     ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png", ".txt"]
@@ -256,10 +257,6 @@ def link_file_loop(
 
             ep_num = parse_episode_number(file.name)
             logger.debug(f"ep_num: {ep_num}")
-            if src_dir.name == series_name:
-                is_episode = True
-            else:
-                is_episode = False
 
             if ep_num is not None and is_episode:
                 # Regular episode file
@@ -333,7 +330,7 @@ def rearrange_directory(
 
     # Season Episode
     logger.info("Start Season Episode")
-    link_file_loop(src_dir, dst_season, series_name, season_num, dry_run)
+    link_file_loop(src_dir, dst_season, series_name, season_num, dry_run, is_episode=True)
 
     # Enhanced Special Content Detection
     logger.info("## START SPECIAL CONTENT")
