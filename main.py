@@ -4,6 +4,7 @@ import re
 import json
 import argparse
 import shutil
+import logging
 import colorlog
 from pathlib import Path  # make sure this is imported
 from typing import Dict, Optional
@@ -24,7 +25,29 @@ handler.setFormatter(
 
 logger = colorlog.getLogger("myapp")
 logger.addHandler(handler)
-logger.setLevel("DEBUG")
+# Default level will be set by configure_logging function
+
+
+def configure_logging(level_name: str) -> None:
+    """Configure the logging level for the application.
+
+    Args:
+        level_name: The logging level name (case-insensitive)
+
+    Raises:
+        ValueError: If the level name is not a valid logging level
+    """
+    # Convert to uppercase for consistency
+    level_name = level_name.upper()
+
+    # Validate the logging level
+    valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+    if level_name not in valid_levels:
+        raise ValueError(f"Invalid log level '{level_name}'. Valid levels are: {', '.join(valid_levels)}")
+
+    # Get the numeric level and set it
+    numeric_level = getattr(logging, level_name)
+    logger.setLevel(numeric_level)
 
 
 def parse_file_name(path: Path) -> Dict:
@@ -168,7 +191,19 @@ def main():
         action="store_true",
         help="Show what would be done without modifying anything.",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default: INFO",
+    )
     args = parser.parse_args()
+
+    # Configure logging level
+    try:
+        configure_logging(args.log_level)
+    except ValueError as e:
+        parser.error(str(e))
+
     dry_run = args.dry_run
 
     for path_str in args.names:
