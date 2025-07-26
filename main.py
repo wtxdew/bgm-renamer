@@ -41,9 +41,11 @@ def configure_logging(level_name: str) -> None:
     level_name = level_name.upper()
 
     # Validate the logging level
-    valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if level_name not in valid_levels:
-        raise ValueError(f"Invalid log level '{level_name}'. Valid levels are: {', '.join(valid_levels)}")
+        raise ValueError(
+            f"Invalid log level '{level_name}'. Valid levels are: {', '.join(valid_levels)}"
+        )
 
     # Get the numeric level and set it
     numeric_level = getattr(logging, level_name)
@@ -99,7 +101,9 @@ EPISODE_PATTERN = r"[\s\-\[](\d{2,3})(?=[\]\s\.])"
 # Episode range pattern: like "01-12"
 EPISODE_RANGE_PATTERN = r"\d{1,2}\s*-\s*\d{1,3}"
 # Language code pattern: matches language codes before subtitle file extensions
-LANGUAGE_CODE_PATTERN = r"\.([A-Za-z]{2,4}(?:-[A-Za-z]{2,4})?(?:-[A-Za-z]{4})?)(?=\.(ass|srt|vtt|sub|ssa)$)"
+LANGUAGE_CODE_PATTERN = (
+    r"\.([A-Za-z]{2,4}(?:-[A-Za-z]{2,4})?(?:-[A-Za-z]{4})?)(?=\.(ass|srt|vtt|sub|ssa)$)"
+)
 
 
 def parse_episode_number(filename: str) -> Optional[int]:
@@ -129,6 +133,7 @@ def extract_language_code(filename: str) -> Optional[str]:
 def link_file_loop(
     src_dir: Path, dst_dir: Path, series_name: str = "", dry_run: bool = False
 ) -> None:
+    file_path_list = []
     ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png"]
     ignore_file = [".DS_Store"]
     logger.info(f"Source directory: {src_dir}")
@@ -148,7 +153,9 @@ def link_file_loop(
             if ep_num is not None:
                 # Regular episode file
                 if language_code:
-                    new_filename = f"{series_name} S01E{ep_num:02d}.{language_code}{file.suffix}"
+                    new_filename = (
+                        f"{series_name} S01E{ep_num:02d}.{language_code}{file.suffix}"
+                    )
                 else:
                     new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
             else:
@@ -161,7 +168,14 @@ def link_file_loop(
                     new_filename = f"{sp_name}{file.suffix}"
 
             dst_file = dst_dir / new_filename
-            logger.info(f"{new_filename} <- {file.name}")
+            file_path_list.append(dst_file)
+            if dst_file in file_path_list:
+                number = file_path_list.index(dst_file) + 1
+                logger.warning(
+                    f"{len(file_path_list):02d}. duplicate with {number:02d}. :{new_filename} <- {file.name}"
+                )
+            else:
+                logger.info(f"{len(file_path_list):02d}. {new_filename} <- {file.name}")
             logger.debug(f"<< SRC File: {file}")
             logger.debug(f">> DST File: {dst_file}")
             if dry_run:
@@ -174,7 +188,10 @@ def link_file_loop(
                     exit(255)
 
 
-def rearrange_directory( meta: Dict[str, str], dry_run: bool = False,) -> None:
+def rearrange_directory(
+    meta: Dict[str, str],
+    dry_run: bool = False,
+) -> None:
     dst_root = Path("/Volumes/NAS_SSD/Media/Anime")
     orig_root = Path("/Volumes/NAS_SSD/Media/orig")
     series_name = meta["series_name"]
