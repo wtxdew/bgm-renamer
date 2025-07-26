@@ -27,15 +27,15 @@ logger.addHandler(handler)
 logger.setLevel("DEBUG")
 
 
-def parse_file_name(path_name: str) -> Dict:
-    original = path_name
+def parse_file_name(path: Path) -> Dict:
+    original = path
     subtitle_groups = []
     video_format_parts = []
     episode_range = None
 
-    name = Path(original).name
+    name = original.name
     dir = name
-    root = str(Path(original).parent)
+    root = str(original.parent)
 
     # Step 1: Extract all bracketed sections
     bracket_sections = re.findall(r"\[(.*?)\]", name)
@@ -49,7 +49,7 @@ def parse_file_name(path_name: str) -> Dict:
 
     # Step 3: Remaining brackets are format/episode info
     for b in bracket_sections[1:]:
-        if re.search(r"\d{1,2}\s*-\s*\d{1,3}", b):  # like 01-12
+        if re.search(EPISODE_RANGE_PATTERN, b):  # like 01-12
             episode_range = b.strip()
         else:
             video_format_parts.append(b.strip())
@@ -65,18 +65,26 @@ def parse_file_name(path_name: str) -> Dict:
         "subtitle_groups": subtitle_groups,
         "video_format": video_format_parts,
         "episode_range": episode_range,
-        "raw": original,
+        "raw": str(original),
         "root": root,
         "dir": dir,
     }
 
 
+# Episode number pattern: 2-3 digits preceded by space, dash, or bracket
+EPISODE_PATTERN = r"[\s\-\[](\d{2,3})(?=[\]\s\.])"
+# Episode range pattern: like "01-12"
+EPISODE_RANGE_PATTERN = r"\d{1,2}\s*-\s*\d{1,3}"
+
+
 def parse_episode_number(filename: str) -> Optional[int]:
-    match = re.search(r"[\s\-\[](\d{2,3})(?=[\]\s\.])", filename)
+    match = re.search(EPISODE_PATTERN, filename)
     return int(match.group(1)) if match else None
 
 
-def link_file_loop(src_dir, dst_dir, series_name="", dry_run=False):
+def link_file_loop(
+    src_dir: Path, dst_dir: Path, series_name: str = "", dry_run: bool = False
+) -> None:
     ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png"]
     ignore_file = [".DS_Store"]
     logger.info(f"Source directory: {src_dir}")
@@ -90,7 +98,8 @@ def link_file_loop(src_dir, dst_dir, series_name="", dry_run=False):
             if ep_num is not None:
                 new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
             else:
-                sp_name = parse_file_name(file)["video_format"][0]
+                video_formats = parse_file_name(file)["video_format"]
+                sp_name = video_formats[0] if video_formats else "Special"
                 new_filename = f"{sp_name}{file.suffix}"
             dst_file = dst_dir / new_filename
             logger.info(f"{new_filename} <- {file.name}")
@@ -99,15 +108,25 @@ def link_file_loop(src_dir, dst_dir, series_name="", dry_run=False):
             if dry_run:
                 logger.debug("[DRY RUN] Would link: SRC -> DST")
             else:
-                logger.error("RUN")
-                os.link(file, dst_file)
+                try:
+                    os.link(file, dst_file)
+                except OSError as e:
+                    logger.error(f"Failed to link {file} -> {dst_file}: {e}")
 
 
-def rearrange_directory(meta: dict, dry_run=False):
+def rearrange_directory(
+    meta: Dict[str, str],
+    dst_root: Path = None,
+    orig_root: Path = None,
+    dry_run: bool = False,
+) -> None:
+    if dst_root is None:
+        dst_root = Path(os.getenv("ANIME_DST_ROOT", "/Volumes/NAS_SSD/Media/Anime"))
+    if orig_root is None:
+        orig_root = Path(os.getenv("ANIME_ORIG_ROOT", "/Volumes/NAS_SSD/Media/orig"))
     series_name = meta["series_name"]
     src_root = Path(meta["root"])
     src_dir = Path(meta["raw"])
-    dst_root = Path("/Volumes/NAS_SSD/Media/Anime")
     dst_dir = dst_root / series_name
     if dry_run:
         logger.debug(f"[DRY RUN] Would create DST directory: {dst_dir}")
@@ -137,13 +156,12 @@ def rearrange_directory(meta: dict, dry_run=False):
     if special_dir.exists() and special_dir.is_dir():
         link_file_loop(special_dir, dst_extras, series_name, dry_run)
 
-    orig_path = "/Volumes/NAS_SSD/Media/orig/"
-    orig_dir = Path(orig_path) / meta["dir"]
+    orig_dir = orig_root / meta["dir"]
 
     logger.info(f"Moving SRC to : {orig_dir}")
     if dry_run:
         logger.debug(f"[DRY RUN] SRC Would Move: {orig_dir}")
-    elif not orig_dir.noexists():
+    elif not orig_dir.exists():
         shutil.move(src_dir, orig_dir)
     else:
         logger.warning(f"[WARNING] Directory exists: {orig_dir}")
@@ -161,7 +179,14 @@ def main():
     dry_run = args.dry_run
 
     for path_str in args.names:
-        meta_dir = parse_file_name(path_str)
+        path = Path(path_str)
+        if not path.exists():
+            logger.error(f"Path does not exist: {path_str}")
+            continue
+        if not path.is_dir():
+            logger.error(f"Path is not a directory: {path_str}")
+            continue
+        meta_dir = parse_file_name(path)
         print(json.dumps(meta_dir, indent=2, ensure_ascii=False))
         rearrange_directory(meta_dir, dry_run)
 
