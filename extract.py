@@ -13,16 +13,18 @@ handler.setFormatter(
     colorlog.ColoredFormatter(
         "%(log_color)s%(levelname)-8s%(reset)s %(message)s",
         log_colors={
-            'DEBUG': 'cyan',
-            'INFO': 'green',
-            'WARNING': 'yellow',
-            'ERROR': 'red',
-            'CRITICAL': 'bold_red',
-        }))
+            "DEBUG": "cyan",
+            "INFO": "green",
+            "WARNING": "yellow",
+            "ERROR": "red",
+            "CRITICAL": "bold_red",
+        },
+    )
+)
 
-logger = colorlog.getLogger('myapp')
+logger = colorlog.getLogger("myapp")
 logger.addHandler(handler)
-logger.setLevel('DEBUG')
+logger.setLevel("DEBUG")
 
 
 def parse_file_name(path_name: str) -> Dict:
@@ -31,12 +33,12 @@ def parse_file_name(path_name: str) -> Dict:
     video_format_parts = []
     episode_range = None
 
-    name = Path(original).name  # Extracts the last part of the path
+    name = Path(original).name
     dir = name
     root = str(Path(original).parent)
 
     # Step 1: Extract all bracketed sections
-    bracket_sections = re.findall(r'\[(.*?)\]', name)
+    bracket_sections = re.findall(r"\[(.*?)\]", name)
 
     # Step 2: First bracket is usually group
     if bracket_sections:
@@ -47,7 +49,7 @@ def parse_file_name(path_name: str) -> Dict:
 
     # Step 3: Remaining brackets are format/episode info
     for b in bracket_sections[1:]:
-        if re.search(r'\d{1,2}\s*-\s*\d{1,3}', b):  # like 01-12
+        if re.search(r"\d{1,2}\s*-\s*\d{1,3}", b):  # like 01-12
             episode_range = b.strip()
         else:
             video_format_parts.append(b.strip())
@@ -55,7 +57,7 @@ def parse_file_name(path_name: str) -> Dict:
         name = name.replace(f"[{b}]", "").strip()
 
     # Step 4: Clean leading dash / extra characters
-    name = re.sub(r'^[-\s]+', '', name)
+    name = re.sub(r"^[-\s]+", "", name)
     series_name = name.strip()
 
     return {
@@ -65,18 +67,18 @@ def parse_file_name(path_name: str) -> Dict:
         "episode_range": episode_range,
         "raw": original,
         "root": root,
-        "dir": dir
+        "dir": dir,
     }
 
 
 def parse_episode_number(filename: str) -> Optional[int]:
-    match = re.search(r'[\s\-\[](\d{2,3})(?=[\]\s\.])', filename)
+    match = re.search(r"[\s\-\[](\d{2,3})(?=[\]\s\.])", filename)
     return int(match.group(1)) if match else None
 
 
 def link_file_loop(src_dir, dst_dir, series_name="", dry_run=False):
-    ignore_exts = ['.zip', '.rar', '.7z', '.tar', '.gz', '.xz', '.png']
-    ignore_file = ['.DS_Store']
+    ignore_exts = [".zip", ".rar", ".7z", ".tar", ".gz", ".xz", ".png"]
+    ignore_file = [".DS_Store"]
     logger.info(f"Source directory: {src_dir}")
     logger.info(f"Target directory: {dst_dir}")
     for file in src_dir.iterdir():
@@ -88,7 +90,7 @@ def link_file_loop(src_dir, dst_dir, series_name="", dry_run=False):
             if ep_num is not None:
                 new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
             else:
-                sp_name = parse_file_name(file)['video_format'][0]
+                sp_name = parse_file_name(file)["video_format"][0]
                 new_filename = f"{sp_name}{file.suffix}"
             dst_file = dst_dir / new_filename
             logger.info(f"{new_filename} <- {file.name}")
@@ -98,13 +100,13 @@ def link_file_loop(src_dir, dst_dir, series_name="", dry_run=False):
                 logger.debug("[DRY RUN] Would link: SRC -> DST")
             else:
                 logger.error("RUN")
-                # os.link(file, dst_file)
+                os.link(file, dst_file)
 
 
 def rearrange_directory(meta: dict, dry_run=False):
-    series_name = meta['series_name']
-    src_root = Path(meta['root'])
-    src_dir = Path(meta['raw'])
+    series_name = meta["series_name"]
+    src_root = Path(meta["root"])
+    src_dir = Path(meta["raw"])
     dst_root = Path("/Volumes/NAS_SSD/Media/Anime")
     dst_dir = dst_root / series_name
     if dry_run:
@@ -127,23 +129,6 @@ def rearrange_directory(meta: dict, dry_run=False):
 
     # Season Episode
     logger.info("Start Season Episode")
-    # for file in src_dir.iterdir():
-    #     if file.is_file() and file.suffix not in ignore_exts:
-    #         if file.name in ignore_file:
-    #             print(f"[SKIP] file ignored: {file.name}")
-    #             continue
-    #         ep_num = parse_episode_number(file.name)
-    #         if ep_num is not None:
-    #             new_filename = f"{series_name} S01E{ep_num:02d}{file.suffix}"
-    #             dst_file = dst_season / new_filename
-    #             logger.info(f"{file.name} -> {new_filename}")
-    #             logger.info(f"<< SRC File: {file}")
-    #             logger.info(f">> DST File: {dst_file}")
-    #             if dry_run:
-    #                 logger.debug("[DRY RUN] Would link: SRC -> DST")
-    #             else:
-    #                 os.link(file, dst_file)
-
     link_file_loop(src_dir, dst_season, series_name, dry_run)
 
     # SPs Video
@@ -151,23 +136,9 @@ def rearrange_directory(meta: dict, dry_run=False):
     special_dir = src_dir / "SPs"
     if special_dir.exists() and special_dir.is_dir():
         link_file_loop(special_dir, dst_extras, series_name, dry_run)
-        # for file in special_dir.iterdir():
-        #     if not file.is_file() or file.suffix in ignore_exts:
-        #         logger.debug(f"Skip {file.name}")
-        #         continue
-        #     sp_name = parse_file_name(file)['video_format'][0]
-        #     dst_file_name = f"{sp_name}{file.suffix}"
-        #     dst_file = dst_extras / dst_file_name
-        #     logger.info(f"{file.name} -> {dst_file_name}")
-        #     logger.info(f"SRC File: {file}")
-        #     logger.info(f"DST File: {dst_file}")
-        #     if dry_run:
-        #         logger.debug("[DRY RUN] Would link: SRC -> DST")
-        #     else:
-        #         os.link(file, dst_file)
 
     orig_path = "/Volumes/NAS_SSD/Media/orig/"
-    orig_dir = Path(orig_path) / meta['dir']
+    orig_dir = Path(orig_path) / meta["dir"]
 
     logger.info(f"Moving SRC to : {orig_dir}")
     if dry_run:
@@ -175,18 +146,17 @@ def rearrange_directory(meta: dict, dry_run=False):
     elif not orig_dir.noexists():
         shutil.move(src_dir, orig_dir)
     else:
-        logger.warn(f"[WARNING] Directory exists: {orig_dir}")
+        logger.warning(f"[WARNING] Directory exists: {orig_dir}")
 
 
 def main():
-    # logging.basicConfig(level=logging.DEBUG)
-
     parser = argparse.ArgumentParser(description="Parse anime folder names.")
-    parser.add_argument('names', nargs='+', help='Folder name(s) to parse')
+    parser.add_argument("names", nargs="+", help="Folder name(s) to parse")
     parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Show what would be done without modifying anything.')
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without modifying anything.",
+    )
     args = parser.parse_args()
     dry_run = args.dry_run
 
@@ -196,5 +166,5 @@ def main():
         rearrange_directory(meta_dir, dry_run)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
